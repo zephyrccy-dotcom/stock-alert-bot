@@ -28,43 +28,56 @@ def send_telegram(message):
 
 print(f"🚀 開始每日監測 6 隻美股 ({datetime.now().strftime('%Y-%m-%d %H:%M')})")
 
-summary_lines = ["**📊 6 隻股票今日收市數據總結**", ""]
-summary_lines.append("| Ticker | 漲跌幅 | 成交量 | 成交金額 | 未平倉期權 |")
-summary_lines.append("|--------|--------|--------|----------|------------|")
+lines = ["**📊 6 隻股票今日收市數據總結**", ""]
+lines.append("```")
+lines.append("Ticker   漲跌幅     成交量      成交金額     業績倒數")
 
 for ticker in TICKERS:
     try:
         stock = yf.Ticker(ticker)
         hist = stock.history(period="5d")
         info = stock.info
-        name = info.get('longName', ticker)[:25]
 
+        # 基本數據
         if len(hist) >= 2:
             prev_close = hist['Close'].iloc[-2]
             close = hist['Close'].iloc[-1]
             change_pct = (close - prev_close) / prev_close * 100
-            volume = int(hist['Volume'].iloc[-1])
-            dollar_volume = int(close * volume)
+            volume = hist['Volume'].iloc[-1]
+            dollar_volume = close * volume
 
-            oi_text = "N/A"
+            vol_str = f"{volume/1_000_000:.1f}M" if volume >= 1_000_000 else f"{int(volume):,}"
+            dollar_str = f"${dollar_volume/1_000_000_000:.1f}B" if dollar_volume >= 1_000_000_000 else f"${dollar_volume/1_000_000:.1f}M"
+
+            emoji = "🟢" if change_pct >= 0 else "🔴"
+
+            # 業績倒數
+            earnings_str = "N/A"
             try:
-                if stock.options:
-                    expiry = stock.options[0]
-                    opt = stock.option_chain(expiry)
-                    total_oi = int(opt.calls['openInterest'].sum() + opt.puts['openInterest'].sum())
-                    oi_text = f"{total_oi:,}"
+                cal = stock.calendar
+                if not cal.empty:
+                    earnings_date = cal.index[0] if hasattr(cal.index, 'date') else cal.iloc[0].name
+                    if isinstance(earnings_date, str):
+                        earnings_date = datetime.strptime(earnings_date[:10], "%Y-%m-%d").date()
+                    days_left = (earnings_date - datetime.now().date()).days
+                    if days_left > 0:
+                        earnings_str = f"{days_left}天"
+                    elif days_left == 0:
+                        earnings_str = "今日"
+                    else:
+                        earnings_str = "已過"
             except:
                 pass
 
-            emoji = "🟢" if change_pct >= 0 else "🔴"
-            summary_lines.append(f"| **{ticker}** | {emoji} **{change_pct:+.2f}%** | {volume:,} | **${dollar_volume:,}** | {oi_text} |")
-
+            line = f"{ticker:5}  {emoji} {change_pct:+6.2f}%   {vol_str:>7}   {dollar_str:>8}   {earnings_str:>6}"
+            lines.append(line)
     except:
-        summary_lines.append(f"| **{ticker}** | 數據錯誤 | - | - | - |")
+        lines.append(f"{ticker:5}  ❌ 數據錯誤")
 
-summary_lines.append("")
-summary_lines.append("🟢 工具正常運行中。")
+lines.append("```")
+lines.append("")
+lines.append("🟢 工具正常運行中。")
 
-send_telegram("\n".join(summary_lines))
+send_telegram("\n".join(lines))
 
 print("掃描完成！🎯")
