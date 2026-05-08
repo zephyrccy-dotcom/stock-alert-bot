@@ -30,25 +30,19 @@ print(f"🚀 開始每日監測 6 隻美股 ({datetime.now().strftime('%Y-%m-%d 
 
 lines = ["**📊 6 隻股票今日收市數據總結**", ""]
 lines.append("```")
-lines.append("Ticker   漲跌幅     成交量      成交金額     業績倒數")
+lines.append("Ticker   漲跌幅     業績倒數")
 
 for ticker in TICKERS:
     try:
         stock = yf.Ticker(ticker)
-        hist = stock.history(period="5d")
+        hist = stock.history(period="15d")   # 多取幾天計算10日平均
         info = stock.info
 
-        # 基本數據
+        # 漲跌幅
         if len(hist) >= 2:
             prev_close = hist['Close'].iloc[-2]
             close = hist['Close'].iloc[-1]
             change_pct = (close - prev_close) / prev_close * 100
-            volume = hist['Volume'].iloc[-1]
-            dollar_volume = close * volume
-
-            vol_str = f"{volume/1_000_000:.1f}M" if volume >= 1_000_000 else f"{int(volume):,}"
-            dollar_str = f"${dollar_volume/1_000_000_000:.1f}B" if dollar_volume >= 1_000_000_000 else f"${dollar_volume/1_000_000:.1f}M"
-
             emoji = "🟢" if change_pct >= 0 else "🔴"
 
             # 業績倒數
@@ -69,8 +63,17 @@ for ticker in TICKERS:
             except:
                 pass
 
-            line = f"{ticker:5}  {emoji} {change_pct:+6.2f}%   {vol_str:>7}   {dollar_str:>8}   {earnings_str:>6}"
+            line = f"{ticker:5}  {emoji} {change_pct:+6.2f}%   {earnings_str:>6}"
             lines.append(line)
+
+            # === 新增：成交量異常提示 ===
+            if len(hist) >= 11:
+                today_vol = hist['Volume'].iloc[-1]
+                avg_vol_10d = hist['Volume'].iloc[-11:-1].mean()
+                if today_vol > avg_vol_10d * 1.3:
+                    ratio = (today_vol / avg_vol_10d - 1) * 100
+                    send_telegram(f"🚀 **{ticker} 成交量異常放大**\n今日成交量比10日平均高 **{ratio:.0f}%**")
+
     except:
         lines.append(f"{ticker:5}  ❌ 數據錯誤")
 
