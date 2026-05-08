@@ -35,7 +35,7 @@ lines.append("Ticker   漲跌幅     業績倒數")
 for ticker in TICKERS:
     try:
         stock = yf.Ticker(ticker)
-        hist = stock.history(period="15d")   # 多取幾天計算10日平均
+        hist = stock.history(period="15d")
         info = stock.info
 
         # 漲跌幅
@@ -45,14 +45,25 @@ for ticker in TICKERS:
             change_pct = (close - prev_close) / prev_close * 100
             emoji = "🟢" if change_pct >= 0 else "🔴"
 
-            # 業績倒數
+            # === 加強版業績倒數 ===
             earnings_str = "N/A"
             try:
+                # 方法1: calendar
                 cal = stock.calendar
                 if not cal.empty:
                     earnings_date = cal.index[0] if hasattr(cal.index, 'date') else cal.iloc[0].name
                     if isinstance(earnings_date, str):
                         earnings_date = datetime.strptime(earnings_date[:10], "%Y-%m-%d").date()
+                    days_left = (earnings_date - datetime.now().date()).days
+                    if days_left > 0:
+                        earnings_str = f"{days_left}天"
+                    elif days_left == 0:
+                        earnings_str = "今日"
+                    else:
+                        earnings_str = "已過"
+                # 方法2: fallback 用 info['earningsDate']
+                elif info.get('earningsDate'):
+                    earnings_date = pd.to_datetime(info['earningsDate']).date()
                     days_left = (earnings_date - datetime.now().date()).days
                     if days_left > 0:
                         earnings_str = f"{days_left}天"
@@ -66,7 +77,7 @@ for ticker in TICKERS:
             line = f"{ticker:5}  {emoji} {change_pct:+6.2f}%   {earnings_str:>6}"
             lines.append(line)
 
-            # === 新增：成交量異常提示 ===
+            # 成交量異常放大提示
             if len(hist) >= 11:
                 today_vol = hist['Volume'].iloc[-1]
                 avg_vol_10d = hist['Volume'].iloc[-11:-1].mean()
