@@ -39,16 +39,18 @@ def grok_analyze(ticker, event):
 
 print(f"🚀 開始每日監測 6 隻美股 ({datetime.now().strftime('%Y-%m-%d %H:%M')})")
 
-summary_lines = ["**📊 6 隻股票今日收市數據總結**"]
+# ================== 收市數據總結 ==================
+summary_lines = ["**📊 6 隻股票今日收市數據總結**", ""]
+summary_lines.append("| Ticker | 漲跌幅 | 成交量 | 成交金額 | 未平倉期權 |")
+summary_lines.append("|--------|--------|--------|----------|------------|")
 
 for ticker in TICKERS:
     try:
         stock = yf.Ticker(ticker)
-        hist = stock.history(period="5d")   # 多取幾天確保有最新數據
+        hist = stock.history(period="5d")
         info = stock.info
-        name = info.get('longName', ticker)[:30]
+        name = info.get('longName', ticker)[:25]
 
-        # === 收市數據 ===
         if len(hist) >= 2:
             prev_close = hist['Close'].iloc[-2]
             close = hist['Close'].iloc[-1]
@@ -56,32 +58,30 @@ for ticker in TICKERS:
             volume = int(hist['Volume'].iloc[-1])
             dollar_volume = int(close * volume)
 
-            summary_lines.append(f"**{ticker}** {name}")
-            summary_lines.append(f"漲跌幅: **{change_pct:+.2f}%**")
-            summary_lines.append(f"成交量: {volume:,} 股")
-            summary_lines.append(f"成交金額: **${dollar_volume:,}**")
-
-            # 未平倉期權數 (Open Interest)
+            # 未平倉期權
+            oi_text = "N/A"
             try:
                 if stock.options:
                     expiry = stock.options[0]
                     opt = stock.option_chain(expiry)
                     total_oi = int(opt.calls['openInterest'].sum() + opt.puts['openInterest'].sum())
-                    summary_lines.append(f"未平倉期權: {total_oi:,}")
+                    oi_text = f"{total_oi:,}"
             except:
-                summary_lines.append("未平倉期權: N/A")
-            
-            summary_lines.append("─" * 30)
+                pass
 
-        # === 原有觸發條件（EMA、52週、業績等）全部保留 ===
-        # EMA 金叉/死叉
+            emoji = "🟢" if change_pct >= 0 else "🔴"
+            summary_lines.append(f"| **{ticker}** | {emoji} **{change_pct:+.2f}%** | {volume:,} | **${dollar_volume:,}** | {oi_text} |")
+
+        # === 觸發條件（EMA、52週、業績等） ===
         if len(hist) >= 30:
             close_series = hist['Close']
             ema8 = close_series.ewm(span=8, adjust=False).mean()
             ema21 = close_series.ewm(span=21, adjust=False).mean()
+
             if ema8.iloc[-2] <= ema21.iloc[-2] and ema8.iloc[-1] > ema21.iloc[-1]:
                 ai = grok_analyze(ticker, "出現 EMA8 上穿 EMA21（金叉）")
                 send_telegram(f"🚨 **{ticker} 金叉提醒**\nEMA8 上穿 EMA21\n\n**Grok分析**：\n{ai}")
+
             elif ema8.iloc[-2] >= ema21.iloc[-2] and ema8.iloc[-1] < ema21.iloc[-1]:
                 ai = grok_analyze(ticker, "出現 EMA8 下穿 EMA21（死叉）")
                 send_telegram(f"⚠️ **{ticker} 死叉提醒**\nEMA8 下穿 EMA21\n\n**Grok分析**：\n{ai}")
@@ -96,10 +96,13 @@ for ticker in TICKERS:
             ai = grok_analyze(ticker, "跌穿52週新低")
             send_telegram(f"❄️ **{ticker} 52週新低提醒**\n\n**Grok分析**：\n{ai}")
 
-    except Exception as e:
-        summary_lines.append(f"{ticker} 數據獲取失敗")
+    except:
+        summary_lines.append(f"| **{ticker}** | 數據錯誤 | - | - | - |")
 
-# === 每日總結報告 ===
-send_telegram("🟢 **今日掃描完成**\n" + "\n".join(summary_lines) + "\n\n工具正常運行中。")
+summary_lines.append("")
+summary_lines.append("工具正常運行中。")
+
+# ================== 發送每日總結 ==================
+send_telegram("\n".join(summary_lines))
 
 print("掃描完成！🎯")
