@@ -2,8 +2,10 @@ name: 每日股票監測
 
 on:
   schedule:
-    - cron: '30 22 * * *'     # 香港時間每日早上 6:30 自動運行
-  workflow_dispatch:          # 允許手動測試
+    - cron: '0 0 * * *'      # HKT 08:00
+    - cron: '0 13 * * *'     # HKT 21:00
+    - cron: '0 17 * * *'     # HKT 01:00 (凌晨)
+  workflow_dispatch:         # 保留手動測試功能
 
 jobs:
   scan:
