@@ -15,7 +15,13 @@ CHAT_IDS = [
 
 client = OpenAI(api_key=GROK_API_KEY, base_url="https://api.x.ai/v1")
 
-TICKERS = ["SNDK", "LITE", "COHR", "GLW", "INTC", "DELL"]
+# ================== 更新後觀察列表（30隻，已去重） ==================
+TICKERS = [
+    "PICK", "IREN", "CRSP", "LITX", "SMCI", "APPX", "RGC", "NOK", "ABEV", "SJ",
+    "SNDK", "LITE", "COHR", "GLW", "INTC", "DELL",
+    "6990.HK", "2476.HK", "RKLB", "MDA", "IRDM", "PL", "TDY", "APH",
+    "KTOS", "ASTS", "RDW", "GILT", "HXL", "ATI"
+]
 
 def send_telegram(message):
     for chat_id in CHAT_IDS:
@@ -26,11 +32,11 @@ def send_telegram(message):
         except:
             pass
 
-print(f"🚀 開始每日監測 6 隻美股 ({datetime.now().strftime('%Y-%m-%d %H:%M')})")
+print(f"🚀 開始每日監測 {len(TICKERS)} 隻股票 ({datetime.now().strftime('%Y-%m-%d %H:%M')})")
 
-lines = ["**📊 6 隻股票今日收市數據總結**", ""]
+lines = ["**📊 今日收市數據總結**", ""]
 lines.append("```")
-lines.append("Ticker   漲跌幅     業績倒數")
+lines.append("Ticker   漲跌幅     板塊")
 
 for ticker in TICKERS:
     try:
@@ -38,43 +44,15 @@ for ticker in TICKERS:
         hist = stock.history(period="15d")
         info = stock.info
 
-        # 漲跌幅
         if len(hist) >= 2:
             prev_close = hist['Close'].iloc[-2]
             close = hist['Close'].iloc[-1]
             change_pct = (close - prev_close) / prev_close * 100
             emoji = "🟢" if change_pct >= 0 else "🔴"
 
-            # === 加強版業績倒數 ===
-            earnings_str = "N/A"
-            try:
-                # 方法1: calendar
-                cal = stock.calendar
-                if not cal.empty:
-                    earnings_date = cal.index[0] if hasattr(cal.index, 'date') else cal.iloc[0].name
-                    if isinstance(earnings_date, str):
-                        earnings_date = datetime.strptime(earnings_date[:10], "%Y-%m-%d").date()
-                    days_left = (earnings_date - datetime.now().date()).days
-                    if days_left > 0:
-                        earnings_str = f"{days_left}天"
-                    elif days_left == 0:
-                        earnings_str = "今日"
-                    else:
-                        earnings_str = "已過"
-                # 方法2: fallback 用 info['earningsDate']
-                elif info.get('earningsDate'):
-                    earnings_date = pd.to_datetime(info['earningsDate']).date()
-                    days_left = (earnings_date - datetime.now().date()).days
-                    if days_left > 0:
-                        earnings_str = f"{days_left}天"
-                    elif days_left == 0:
-                        earnings_str = "今日"
-                    else:
-                        earnings_str = "已過"
-            except:
-                pass
+            sector = info.get('sector', info.get('industry', 'N/A'))[:18]
 
-            line = f"{ticker:5}  {emoji} {change_pct:+6.2f}%   {earnings_str:>6}"
+            line = f"{ticker:6}  {emoji} {change_pct:+6.2f}%   {sector}"
             lines.append(line)
 
             # 成交量異常放大提示
@@ -83,10 +61,10 @@ for ticker in TICKERS:
                 avg_vol_10d = hist['Volume'].iloc[-11:-1].mean()
                 if today_vol > avg_vol_10d * 1.3:
                     ratio = (today_vol / avg_vol_10d - 1) * 100
-                    send_telegram(f"🚀 **{ticker} 成交量異常放大**\n今日成交量比10日平均高 **{ratio:.0f}%**")
+                    send_telegram(f"🚀 **{ticker} 成交量異常放大**\n今日比10日平均高 **{ratio:.0f}%**")
 
     except:
-        lines.append(f"{ticker:5}  ❌ 數據錯誤")
+        lines.append(f"{ticker:6}  ❌ 數據錯誤")
 
 lines.append("```")
 lines.append("")
